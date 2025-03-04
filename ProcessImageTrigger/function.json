@@ -7,7 +7,7 @@
             "direction": "in",
             "name": "req",
             "methods": ["post"],
-            "route": "ProcessImageTrigger"
+            "route": null
         },
         {
             "type": "http",
@@ -15,4 +15,4 @@
             "name": "$return"
         }
     ]
-  }
+}
