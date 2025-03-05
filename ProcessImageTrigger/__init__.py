@@ -4,7 +4,7 @@ import os
 import azure.functions as func
 from azure.storage.blob import BlobServiceClient
 from azure.storage.queue import QueueClient
-from azure.storage.table import TableClient
+from azure.data.tables import TableClient
 from azure.identity import DefaultAzureCredential
 import datetime
 import uuid

@@ -1,5 +1,5 @@
 azure-functions
 azure-storage-blob
 azure-storage-queue
-azure-storage-table
+azure-data-tables
 azure-identity
