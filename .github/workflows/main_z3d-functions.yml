@@ -34,6 +34,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install wheel
+          pip install --platform manylinux1_x86_64 --only-binary=:all: cryptography==41.0.7
           pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Zip artifact for deployment
