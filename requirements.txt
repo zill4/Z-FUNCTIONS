@@ -1,4 +1,5 @@
 azure-functions
 azure-storage-blob
-azure-mgmt-containerinstance
+azure-storage-queue
+azure-storage-table
 azure-identity

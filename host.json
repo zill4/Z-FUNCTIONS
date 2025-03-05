@@ -5,12 +5,19 @@
       "samplingSettings": {
         "isEnabled": true,
         "excludedTypes": "Request"
-      }
+      },
+      "enableLiveMetrics": true,
+      "enableDependencyTracking": true,
+      "enablePerformanceCountersCollection": true
     },
     "logLevel": {
-      "default": "Information",
-      "Function": "Information"
-    }
+      "default": "Debug",
+      "Function": "Debug",
+      "Function.ProcessImageTrigger": "Debug",
+      "Host.Results": "Debug",
+      "Host.Aggregator": "Debug"
+    },
+    "fileLoggingMode": "always"
   },
   "extensionBundle": {
     "id": "Microsoft.Azure.Functions.ExtensionBundle",

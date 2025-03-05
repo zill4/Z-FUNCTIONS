@@ -3,117 +3,92 @@ import json
 import os
 import azure.functions as func
 from azure.storage.blob import BlobServiceClient
-from azure.mgmt.containerinstance import ContainerInstanceManagementClient
-from azure.mgmt.containerinstance.models import (
-    ContainerGroup, Container, ResourceRequirements, 
-    ResourceRequests, EnvironmentVariable, GpuResource
-)
+from azure.storage.queue import QueueClient
+from azure.storage.table import TableClient
 from azure.identity import DefaultAzureCredential
 import datetime
-import traceback
-import sys
+import uuid
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        # Set up detailed logging
         logging.info('Python HTTP trigger function processing request.')
-        logging.info(f'Request method: {req.method}')
-        logging.info(f'Request URL: {req.url}')
-        logging.info(f'Request headers: {dict(req.headers)}')
-        body = req.get_body().decode()
-        logging.info(f'Request body: {body}')
-
-        # Get job ID from request
+        
+        # Parse request
         try:
             req_body = req.get_json()
-            logging.info(f'Parsed request body: {req_body}')
+            job_id = req_body.get('job_id') or str(uuid.uuid4())
+            image_url = req_body.get('image_url')
         except ValueError as e:
-            logging.error(f'JSON parsing error: {str(e)}')
             return func.HttpResponse(
-                json.dumps({
-                    "error": "Invalid JSON",
-                    "details": str(e)
-                }),
+                json.dumps({"error": "Invalid JSON", "details": str(e)}),
                 status_code=400,
                 mimetype="application/json"
             )
 
-        job_id = req_body.get('job_id')
-        image_url = req_body.get('image_url')
-        
-        logging.info(f'Extracted job_id: {job_id}, image_url: {image_url}')
-
-        # Validate required environment variables
-        required_vars = [
-            "AzureWebJobsStorage",
-            "SUBSCRIPTION_ID",
-            "RESOURCE_GROUP",
-            "FUNCTION_APP_NAME",
-            "CONTAINER_IMAGE",
-            "LOCATION"
-        ]
-        
-        env_vars = {}
-        missing_vars = []
-        for var in required_vars:
-            value = os.environ.get(var)
-            if not value:
-                missing_vars.append(var)
-            env_vars[var] = 'present' if value else 'missing'
-        
-        logging.info(f'Environment variables status: {env_vars}')
-        
-        if missing_vars:
-            error_msg = f'Missing required environment variables: {missing_vars}'
-            logging.error(error_msg)
+        if not image_url:
             return func.HttpResponse(
-                json.dumps({
-                    "error": error_msg
-                }),
-                status_code=500,
+                json.dumps({"error": "image_url is required"}),
+                status_code=400,
                 mimetype="application/json"
             )
 
-        # Connect to Azure Storage
-        try:
-            connection_string = os.environ["AzureWebJobsStorage"]
-            blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-            logging.info('Successfully connected to Azure Storage')
-        except Exception as e:
-            error_msg = f'Failed to connect to Azure Storage: {str(e)}'
-            logging.error(error_msg)
-            logging.error(f'Storage error details: {traceback.format_exc()}')
-            return func.HttpResponse(
-                json.dumps({
-                    "error": error_msg,
-                    "details": traceback.format_exc()
-                }),
-                status_code=500,
-                mimetype="application/json"
-            )
+        # Initialize Azure clients using managed identity
+        credential = DefaultAzureCredential()
+        storage_account_url = f"https://{os.environ['STORAGE_ACCOUNT']}.blob.core.windows.net"
+        
+        # Create blob client
+        blob_service_client = BlobServiceClient(
+            account_url=storage_account_url,
+            credential=credential
+        )
 
-        # Continue with your existing code...
-        # But wrap each major operation in try/except blocks with logging
+        # Create queue client
+        queue_client = QueueClient(
+            account_url=storage_account_url.replace('blob', 'queue'),
+            queue_name="processing-queue",
+            credential=credential
+        )
+
+        # Create table client
+        table_client = TableClient(
+            endpoint=storage_account_url.replace('blob', 'table'),
+            table_name="jobstatus",
+            credential=credential
+        )
+
+        # Store job status in Table Storage
+        table_client.create_entity({
+            'PartitionKey': 'jobs',
+            'RowKey': job_id,
+            'status': 'pending',
+            'created': datetime.datetime.utcnow().isoformat(),
+            'image_url': image_url
+        })
+
+        # Queue the job message
+        message = {
+            'job_id': job_id,
+            'image_url': image_url
+        }
+        queue_client.send_message(json.dumps(message))
+
+        return func.HttpResponse(
+            json.dumps({
+                "success": True,
+                "job_id": job_id,
+                "status": "pending",
+                "message": "Job queued successfully"
+            }),
+            status_code=200,
+            mimetype="application/json"
+        )
 
     except Exception as e:
-        error_type = type(e).__name__
-        error_msg = str(e)
-        stack_trace = traceback.format_exc()
-        
-        error_details = {
-            "error_type": error_type,
-            "error_message": error_msg,
-            "stack_trace": stack_trace,
-            "python_version": sys.version,
-        }
-        
-        logging.error(f'Unhandled error in function:')
-        logging.error(json.dumps(error_details, indent=2))
-        
+        logging.error(f'Error: {str(e)}')
         return func.HttpResponse(
             json.dumps({
                 "error": "Internal server error",
-                "details": error_details
+                "details": str(e)
             }),
             status_code=500,
             mimetype="application/json"
